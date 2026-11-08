@@ -21,8 +21,8 @@ Aturan bisnis:
 - Jika ditanya total sekaligus rinciannya, atau kamu menampilkan rincian per baris (mis. per termin) untuk nominal seperti sisa/outstanding, tampilkan baris rincian plus kolom total keseluruhan (SUM(...) OVER ()).
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 - Rekap yang dipisah per dua dimensi (mis. per periode per kategori): sertakan juga baris subtotal per periode dan grand total (UNION ALL).
-- Untuk "apakah ada ...", kembalikan hanya baris yang memenuhi kondisi (filter di WHERE/HAVING, tanpa baris bernilai 0); hasil kosong berarti tidak ada.
-- Pertanyaan "berapa jumlah unit/customer": tampilkan barisnya dengan kolom identitas (nomor unit, nama customer), bukan hanya COUNT. Pertanyaan "total" nominal: kembalikan SUM-nya.
+- Untuk "apakah ada ...": SELECT baris detail yang memenuhi kondisi lewat WHERE/HAVING (jangan COUNT/SUM/CASE yang selalu menghasilkan 1 baris, jangan baris bernilai 0); hasil kosong berarti tidak ada.
+- Pertanyaan "berapa jumlah unit/customer": jangan hanya COUNT; SELECT satu baris per unit/customer dengan kolom identitasnya (UnitNumber / CustomerName) plus COUNT(*) OVER () AS Jumlah. Pertanyaan "total" nominal: kembalikan SUM-nya.
 - "DP"/uang muka = termin BillingType 'Down Payment' (nominal tagihannya); "harga" = TotalPrice; lunas 100%/siap serah terima = SUM(Payments_Received.PaidAmount) >= TotalPrice (bukan Status 'Paid' jadwal tagihan; kecualikan hanya kontrak 'Cancelled', kontrak 'Completed' ikut).
 
 Tentukan status:
@@ -31,7 +31,7 @@ Tentukan status:
 - "ok": selain itu, termasuk statistik/agregat (rata-rata, jumlah, total) per tower/tipe unit: hitung dari data user ini saja, jangan refused. Tulis tepat satu SELECT SQLite. SQL baca yang ditempel user (walau typo/dialek lain, mis. TOP) -> perbaiki jadi SQLite dan jalankan; tanpa filter user pun aman karena database sudah dibatasi ke data user ini, jadi bukan alasan refused. Cocokkan nama/kode yang salah ketik ke data terdekat (LIKE). Jika pertanyaan mencampur bagian yang boleh dengan bagian di luar akses atau tidak ada (mis. kolom yang tidak ada di skema, seperti kontak pribadi), jawab "ok" (bukan refused) untuk bagian yang tersedia saja dan sebut di answer bagian mana yang tidak tersedia, jangan dikarang. Pertanyaan "kenapa/kapan akan/prediksi" atau minta grafik tetap "ok": ambil fakta terkait dalam satu SELECT (tiap termin lewat jatuh tempo beserta sisanya, plus denda bersih tertunggak) tanpa menebak alasan dan tanpa kode grafik.
 
 Balas HANYA JSON satu baris: {{"status": "ok|refused|clarify", "sql": "SELECT ... atau null", "answer": "1 kalimat Bahasa Indonesia"}}
-Untuk refused/clarify, answer singkat tanpa menyebut nama tabel, kolom, atau detail internal."""
+answer: kalimat netral pengantar hasil (angka diambil dari hasil kueri, jangan ditebak), tanpa menyebut nama tabel, kolom, atau nilai status internal (mis. Outstanding, Paid)."""
 
 SALES_RULES = ("Role Sales: tidak boleh melihat laporan penerimaan/mutasi kas (rekap kas masuk per bulan/tower, "
                "kwitansi, rekening bank) -> refused. Boleh melihat total yang sudah dibayar per kontrak miliknya, "

@@ -14,6 +14,8 @@ MODEL = os.getenv("LLM_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
 FALLBACK_MODELS = [m.strip() for m in os.getenv("LLM_FALLBACK_MODELS", "nvidia/nemotron-3.5-super-vl:free").split(",")
                    if m.strip()]
 
+REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low")
+
 chat_model = ChatOpenAI(
     model=MODEL,
     base_url=os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -21,7 +23,9 @@ chat_model = ChatOpenAI(
     max_tokens=1500,
     timeout=20,
     max_retries=1,  # the SDK retries rate limits, 5xx and timeouts once by itself
-    extra_body={"models": [MODEL, *FALLBACK_MODELS], "reasoning": {"effort": "low", "exclude": True}},
+    extra_body={"models": [MODEL, *FALLBACK_MODELS],
+                # Hidden reasoning costs latency; lower it (e.g. "minimal") if replies are slow
+                "reasoning": {"effort": REASONING_EFFORT, "exclude": True}},
 )
 
 

@@ -54,7 +54,7 @@ flowchart LR
 4. **execute.** The query runs on a read-only connection with a 5-second deadline and a 200-row cap.
 5. **fix (self-healing loop).** A parse error, a database error or an unusable model reply is sent back to the model as the next user turn: "SQL gagal: \<error\>. Perbaiki…". The model then tries again. There are at most 4 LLM calls per request, which is the first try plus up to 3 corrections. When the budget runs out the request fails cleanly with `sql_failed` or `llm_bad_output`.
 
-The answer text is assembled from the model's one-line note plus the rows, so numbers in the answer always come from the database, not from the model.
+The `answer` is the model's one-line note plus a row count; the figures themselves are returned in `data.rows` straight from the database, never written by the model.
 
 ## Security
 
@@ -120,7 +120,7 @@ Every error comes back as JSON, `{"status": "error", "answer": "<friendly text>"
 
 ## Model and cost
 
-- **Model:** the default is `nvidia/nemotron-3-ultra-550b-a55b:free` on OpenRouter, with `nvidia/nemotron-3.5-super-vl:free` as a fallback through OpenRouter's `models` list. Set them with `LLM_MODEL` and `LLM_FALLBACK_MODELS`. Any OpenAI-compatible endpoint works through `LLM_BASE_URL`.
+- **Model:** the default is `nvidia/nemotron-3-ultra-550b-a55b:free` on OpenRouter, with `nvidia/nemotron-3.5-super-vl:free` as a fallback through OpenRouter's `models` list. Set them with `LLM_MODEL` and `LLM_FALLBACK_MODELS`. `LLM_REASONING_EFFORT` (default `low`) controls hidden reasoning, which is the main source of latency on reasoning models. Any OpenAI-compatible endpoint works through `LLM_BASE_URL`.
 - **Usage:** every reply carries `usage` (`llm_calls`, tokens and `cost_usd`), summed over all LLM calls for the request. Cost comes from OpenRouter's `usage.cost`, which is 0 on free models.
 - **Typical cost:** one LLM call of about 2–4k prompt tokens. Refusals and clarifications take a single call.
 

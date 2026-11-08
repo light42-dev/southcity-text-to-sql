@@ -23,7 +23,6 @@ from .errors import ServiceError
 from .prompts import SALES_RULES, prompt
 
 MAX_LLM_CALLS = 4  # first try + up to 3 self-corrections
-ANSWER_ROWS = 20   # rows spelled out in the answer text
 
 NOT_ALLOWED = "Maaf, permintaan ini tidak diizinkan."
 CANNOT_PROCESS = "Maaf, tidak bisa diproses."
@@ -85,7 +84,7 @@ def execute(state: State) -> State:
             columns, rows = db.query(con, sql)
     except sqlite3.Error as e:
         return {"feedback": f"SQL gagal: {str(e)[:300]}. Perbaiki, balas JSON saja.", "error": "sql_failed"}
-    answer = render(state["decision"].get("answer") or "", columns, rows)
+    answer = render(state["decision"].get("answer") or "", rows)
     return {"result": result("ok", answer, {"columns": columns, "rows": rows}, sql)}
 
 
@@ -161,11 +160,8 @@ def result(status: str, answer: str, data: dict | None = None, sql: str | None =
     return {"status": status, "answer": answer, "data": data, "sql": sql}
 
 
-def render(note: str, columns: list[str], rows: list[list]) -> str:
+def render(note: str, rows: list[list]) -> str:
+    """Short answer text; the figures themselves are in `data.rows`."""
     if not rows:
         return f"{note} Tidak ada data yang cocok.".strip()
-    lines = [f"{note} ({len(rows)} baris)"]
-    lines += ["- " + ", ".join(f"{c}: {v}" for c, v in zip(columns, row)) for row in rows[:ANSWER_ROWS]]
-    if len(rows) > ANSWER_ROWS:
-        lines.append(f"... dan {len(rows) - ANSWER_ROWS} baris lainnya.")
-    return "\n".join(lines)
+    return f"{note} ({len(rows)} baris)".strip()
