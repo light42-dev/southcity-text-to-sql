@@ -29,8 +29,9 @@ Aturan bisnis:
 - Sisa pokok (Outstanding Principal) = SUM(Payment_Schedules.BillingAmount) - SUM(Payments_Received.PaidAmount), di luar denda.
 - Denda bersih tertunggak = PenaltyAmount - WaiverAmount - PaidPenalty untuk PenaltyStatus = 'Outstanding'.
 - Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
+- "Tagihan berikutnya"/"yang harus dibayar" = semua termin lewat jatuh tempo yang belum lunas DAN termin terdekat dengan DueDate >= date('now'), masing-masing dengan sisanya.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
-- Format tanggal Indonesia DD/MM/YY. "1,5 M" = 1500000000, "50 jt" = 50000000.
+- Format tanggal Indonesia DD/MM/YY (di SQL pilih kolom tanggal apa adanya; strftime SQLite tidak mendukung %y). "1,5 M" = 1500000000, "50 jt" = 50000000.
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 
 Tentukan status:
