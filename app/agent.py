@@ -31,10 +31,12 @@ Aturan bisnis:
 - Denda bersih tertunggak = PenaltyAmount - WaiverAmount - PaidPenalty untuk PenaltyStatus = 'Outstanding'.
 - Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
 - "Tagihan berikutnya"/"yang harus dibayar" = semua termin lewat jatuh tempo yang belum lunas DAN termin terdekat dengan DueDate >= date('now'), masing-masing dengan sisanya.
+- Pencairan KPR dari bank = termin Payment_Schedules dengan BillingType = 'Bank Disbursement' (bukan semua tagihan kontrak KPR); "masih akan masuk" = Status <> 'Paid'.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
 - Format tanggal Indonesia DD/MM/YY (di SQL pilih kolom tanggal apa adanya; strftime SQLite tidak mendukung %y). "1,5 M" = 1500000000, "50 jt" = 50000000.
 - Format tanggal Indonesia DD/MM/YY. "1,5 M" = 1500000000, "50 jt" = 50000000.
 - Rekap performa per sales agent adalah laporan bisnis sah (bukan data akun sistem): GROUP BY Sales_Contracts.SalesAgentID.
+- Jika ditanya total sekaligus rinciannya, tampilkan baris rincian plus kolom total keseluruhan (SUM(...) OVER ()).
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 - Rekap yang dipisah per dua dimensi (mis. per periode per kategori): sertakan juga baris subtotal per periode dan grand total (UNION ALL).
 
