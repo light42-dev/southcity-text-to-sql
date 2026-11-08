@@ -29,8 +29,10 @@ Aturan bisnis:
 - Sisa pokok (Outstanding Principal) = SUM(Payment_Schedules.BillingAmount) - SUM(Payments_Received.PaidAmount), di luar denda.
 - Denda bersih tertunggak = PenaltyAmount - WaiverAmount - PaidPenalty untuk PenaltyStatus = 'Outstanding'.
 - Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
+- Pencairan KPR dari bank = termin Payment_Schedules dengan BillingType = 'Bank Disbursement' (bukan semua tagihan kontrak KPR); "masih akan masuk" = Status <> 'Paid'.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
 - Format tanggal Indonesia DD/MM/YY. "1,5 M" = 1500000000, "50 jt" = 50000000.
+- Jika ditanya total sekaligus rinciannya, tampilkan baris rincian plus kolom total keseluruhan (SUM(...) OVER ()).
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 
 Tentukan status:
