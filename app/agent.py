@@ -31,6 +31,7 @@ Aturan bisnis:
 - Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
 - Format tanggal Indonesia DD/MM/YY. "1,5 M" = 1500000000, "50 jt" = 50000000.
+- Rekap performa per sales agent adalah laporan bisnis sah (bukan data akun sistem): GROUP BY Sales_Contracts.SalesAgentID.
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 
 Tentukan status:
