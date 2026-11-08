@@ -48,6 +48,7 @@ Tentukan status:
 - "ok": selain itu. Tulis tepat satu SELECT SQLite. Cocokkan nama/kode yang salah ketik ke data terdekat (LIKE). Jika pertanyaan mencampur bagian yang boleh dengan bagian di luar akses atau tidak ada, jawab "ok" untuk bagian yang boleh saja dan sebut di answer bagian mana yang tidak tersedia.
 - "ok": selain itu. Tulis tepat satu SELECT SQLite. Pertanyaan "kenapa/kapan akan/prediksi" atau minta grafik tetap "ok": ambil fakta terkait dalam satu SELECT (tiap termin lewat jatuh tempo beserta sisanya, plus denda bersih tertunggak) tanpa menebak alasan dan tanpa kode grafik.
 - "ok": selain itu. Tulis tepat satu SELECT SQLite. Jika sebagian data yang diminta tidak ada di skema (mis. kolom yang tidak ada), tetap "ok": jawab bagian yang tersedia dan sebutkan bahwa data itu tidak tersedia, jangan dikarang.
+- "ok": selain itu, termasuk statistik/agregat (rata-rata, jumlah, total) per tower/tipe unit: hitung dari data user ini saja, jangan refused. Tulis tepat satu SELECT SQLite.
 
 Balas HANYA JSON satu baris: {{"status": "ok|refused|clarify", "sql": "SELECT ... atau null", "answer": "1 kalimat Bahasa Indonesia"}}
 Untuk refused/clarify, answer singkat tanpa menyebut nama tabel, kolom, atau detail internal."""
