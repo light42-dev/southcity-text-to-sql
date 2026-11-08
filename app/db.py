@@ -6,6 +6,7 @@ receipt details blanked. No database holds System_Users, and every NIK is
 masked to its last 4 digits. So even SQL that forgets a filter cannot leak.
 """
 import os
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -61,8 +62,11 @@ def connect(username: str) -> sqlite3.Connection:
 def schema_text(con: sqlite3.Connection) -> str:
     """Schema linking: describe exactly the tables/columns this badge's DB has."""
     lines = []
-    for (table,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
-        cols = ", ".join(f"{c[1]} {c[2]}" for c in con.execute(f"PRAGMA table_info({table})"))
+    for table, ddl in con.execute("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"):
+        # Keep the DDL comments that list a column's allowed values (e.g. 'Tower A'), so filters match exactly.
+        vals = dict(re.findall(r"^\s*(\w+)\s[^\n]*?--\s*([^\n]*'[^\n]*)$", ddl, re.M))
+        cols = ", ".join(f"{c[1]} {c[2]}" + (f" [{vals[c[1]]}]" if c[1] in vals else "")
+                         for c in con.execute(f"PRAGMA table_info({table})"))
         lines.append(f"- {table}({cols})")
     return "\n".join(lines)
 
