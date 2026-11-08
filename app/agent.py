@@ -51,6 +51,8 @@ Untuk refused/clarify, answer singkat tanpa menyebut nama tabel, kolom, atau det
 SALES_RULES = ("Role Sales: tidak boleh melihat laporan penerimaan/mutasi kas (rekap kas masuk per bulan/tower, "
                "kwitansi, rekening bank) -> refused. Boleh melihat total yang sudah dibayar per kontrak miliknya. "
                "Pertanyaan rekap/performa per sales agent atau semua kontrak -> ok, jawab dengan data miliknya saja (DB sudah difilter).\n")
+               "kwitansi, rekening bank) -> refused. Boleh melihat total yang sudah dibayar per kontrak miliknya, "
+               "dan rekap nilai penjualan/harga kontrak miliknya per tower/unit (itu bukan laporan kas) -> ok.\n")
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", SYSTEM),
