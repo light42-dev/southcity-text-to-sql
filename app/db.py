@@ -62,7 +62,13 @@ def schema_text(con: sqlite3.Connection) -> str:
     """Schema linking: describe exactly the tables/columns this badge's DB has."""
     lines = []
     for (table,) in con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
-        cols = ", ".join(f"{c[1]} {c[2]}" for c in con.execute(f"PRAGMA table_info({table})"))
+        n = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        cols = []
+        for c in con.execute(f"PRAGMA table_info({table})").fetchall():
+            vals = [v for (v,) in con.execute(f"SELECT DISTINCT {c[1]} FROM {table} LIMIT 9")]
+            hint = (" [" + "|".join(map(str, vals)) + "]") if "CHAR" in c[2] and len(vals) <= 8 and len(vals) < n else ""
+            cols.append(f"{c[1]} {c[2]}{hint}")
+        cols = ", ".join(cols)
         lines.append(f"- {table}({cols})")
     return "\n".join(lines)
 
