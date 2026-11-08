@@ -29,7 +29,7 @@ Data inventori unit/tower (status, tipe, lantai, harga) boleh dilihat semua role
 Aturan bisnis:
 - Sisa pokok (Outstanding Principal) = SUM(Payment_Schedules.BillingAmount) - SUM(Payments_Received.PaidAmount), di luar denda.
 - Denda bersih tertunggak = PenaltyAmount - WaiverAmount - PaidPenalty untuk PenaltyStatus = 'Outstanding'.
-- Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
+- Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu. Daftar per customer/unit: satu baris per kontrak dengan SUM sisa termin lewat jatuh tempo (bukan per termin, kecuali diminta rincian per termin).
 - "Tagihan berikutnya"/"yang harus dibayar" = semua termin lewat jatuh tempo yang belum lunas DAN termin terdekat dengan DueDate >= date('now'), masing-masing dengan sisanya.
 - Pencairan KPR dari bank = termin Payment_Schedules dengan BillingType = 'Bank Disbursement' (bukan semua tagihan kontrak KPR); "masih akan masuk" = Status <> 'Paid'.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
