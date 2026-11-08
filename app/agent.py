@@ -41,7 +41,7 @@ Aturan bisnis:
 - Untuk "apakah ada ...", kembalikan hanya baris yang memenuhi kondisi (filter di WHERE/HAVING, tanpa baris bernilai 0); hasil kosong berarti tidak ada.
 - Pertanyaan "berapa jumlah unit/customer": tampilkan barisnya dengan kolom identitas (nomor unit, nama customer), bukan hanya COUNT. Pertanyaan "total" nominal: kembalikan SUM-nya.
 - Format tanggal Indonesia DD/MM/YY. "1,5 M" = 1500000000, "50 jt" = 50000000.
-- "DP"/uang muka = termin BillingType 'Down Payment' (nominal tagihannya); "harga" = TotalPrice.
+- "DP"/uang muka = termin BillingType 'Down Payment' (nominal tagihannya); "harga" = TotalPrice; lunas 100%/siap serah terima = SUM(Payments_Received.PaidAmount) >= TotalPrice (bukan Status 'Paid' jadwal tagihan; kecualikan hanya kontrak 'Cancelled', kontrak 'Completed' ikut).
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 
 Tentukan status:
