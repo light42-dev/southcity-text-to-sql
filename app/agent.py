@@ -27,6 +27,7 @@ Kontrak/customer yang boleh diakses user ini: {scope}
 {role_rules}
 Aturan bisnis:
 - Sisa pokok (Outstanding Principal) = SUM(Payment_Schedules.BillingAmount) - SUM(Payments_Received.PaidAmount), di luar denda.
+- Lunas 100% / siap serah terima = SUM(Payments_Received.PaidAmount) >= Sales_Contracts.TotalPrice (bandingkan ke harga kontrak, bukan ke jadwal tagihan atau Status 'Paid').
 - Denda bersih tertunggak = PenaltyAmount - WaiverAmount - PaidPenalty untuk PenaltyStatus = 'Outstanding'.
 - Lewat jatuh tempo = DueDate < date('now') dan Status <> 'Paid'; sisa termin = BillingAmount - total pembayaran termin itu.
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
