@@ -35,7 +35,7 @@ Aturan bisnis:
 - Jangan agregasi beberapa tabel 1:N dalam satu JOIN (double count); agregasi tiap tabel di subquery/CTE dulu.
 - Format tanggal Indonesia DD/MM/YY (di SQL pilih kolom tanggal apa adanya; strftime SQLite tidak mendukung %y). "1,5 M" = 1500000000, "50 jt" = 50000000.
 - Rekap performa per sales agent adalah laporan bisnis sah (bukan data akun sistem): GROUP BY Sales_Contracts.SalesAgentID.
-- Jika ditanya total sekaligus rinciannya, tampilkan baris rincian plus kolom total keseluruhan (SUM(...) OVER ()).
+- Jika ditanya total sekaligus rinciannya, atau kamu menampilkan rincian per baris (mis. per termin) untuk nominal seperti sisa/outstanding, tampilkan baris rincian plus kolom total keseluruhan (SUM(...) OVER ()).
 - Untuk "paling ...", sertakan semua yang seri (jangan LIMIT 1).
 - Rekap yang dipisah per dua dimensi (mis. per periode per kategori): sertakan juga baris subtotal per periode dan grand total (UNION ALL).
 - Untuk "apakah ada ...", kembalikan hanya baris yang memenuhi kondisi (filter di WHERE/HAVING, tanpa baris bernilai 0); hasil kosong berarti tidak ada.
