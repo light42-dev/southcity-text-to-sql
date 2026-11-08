@@ -1,103 +1,105 @@
 """FastAPI entry point: POST /api/chat, GET /api/health."""
-import json
-import os
 import unicodedata
+from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, Request
-from fastapi.concurrency import run_in_threadpool
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StrictStr, field_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import agent, db
+from .errors import ERRORS, ServiceError
 
-FAULTS_ON = os.getenv("ENABLE_FAULT_INJECTION") == "1"
-MAX_BODY = 256_000
-MAX_MESSAGE = 4_000
-MAX_HISTORY = 6
+MAX_BODY_BYTES = 256_000
+MAX_MESSAGE_CHARS = 4_000
+MAX_HISTORY_TURNS = 6
 
-ERRORS = {  # code -> (http status, user-facing answer)
-    "llm_timeout": (504, "Layanan sedang sibuk, silakan coba lagi."),
-    "llm_rate_limited": (429, "Terlalu banyak permintaan, silakan coba lagi sebentar lagi."),
-    "llm_unavailable": (502, "Layanan AI sedang tidak tersedia, silakan coba lagi."),
-    "llm_bad_output": (502, "Sistem tidak dapat menyusun jawaban, silakan ulangi pertanyaan."),
-    "sql_failed": (502, "Pertanyaan belum bisa dijawab, silakan ubah kalimatnya."),
-    "db_unavailable": (503, "Database sedang tidak dapat diakses, silakan coba lagi."),
-}
-
-# Cyrillic/Greek look-alikes -> Latin, so "Sіti" is read as "Siti"
+# Cyrillic look-alikes -> Latin, so "Sіti" is read as "Siti"
 CONFUSABLES = str.maketrans("аеорсухіјѕАВЕКМНОРСТХІЈЅ", "aeopcyxijsABEKMHOPCTXIJS")
-
-app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-db.build()
+EMPTY_USAGE = {"llm_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0}
 
 
-def zero_usage():
-    return agent.Usage()
+class Turn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: StrictStr = Field(max_length=MAX_MESSAGE_CHARS)
+    username: StrictStr | None = None
 
 
-def bad_request(message: str, status: int = 400):
-    return JSONResponse({"status": "error", "answer": "Permintaan tidak valid.",
-                         "error": {"code": "bad_request", "message": message},
-                         "usage": zero_usage()}, status_code=status)
+class ChatRequest(BaseModel):
+    username: StrictStr
+    message: StrictStr = Field(max_length=MAX_MESSAGE_CHARS)
+    history: list[Turn] | None = None
+
+    @field_validator("username")
+    @classmethod
+    def known_user(cls, v: str) -> str:
+        if v not in db.USERS:
+            raise ValueError("unknown username")
+        return v
+
+    @field_validator("message")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("message is empty")
+        return v
 
 
-def with_fault(resp: JSONResponse, fault: str | None) -> JSONResponse:
-    if fault:
-        resp.headers["X-Fault-Injected"] = fault
-    return resp
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    db.build()
+    yield
+
+
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+
+def error_body(code: str, answer: str, message: str, usage: dict | None = None) -> dict:
+    return {"status": "error", "answer": answer, "error": {"code": code, "message": message},
+            "data": None, "sql": None, "usage": usage or EMPTY_USAGE}
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
+        return JSONResponse(error_body("bad_request", "Permintaan tidak valid.", "Body terlalu besar."), 413)
+    return await call_next(request)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_: Request, exc: RequestValidationError):
+    fields = sorted({".".join(str(p) for p in e["loc"][1:] if isinstance(p, str)) or "body" for e in exc.errors()})
+    message = "Field tidak valid: " + ", ".join(fields)
+    return JSONResponse(error_body("bad_request", "Permintaan tidak valid.", message), 422)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(_: Request, exc: StarletteHTTPException):
+    return JSONResponse(error_body("bad_request", "Permintaan tidak valid.", str(exc.detail)), exc.status_code,
+                        headers=exc.headers)
+
+
+@app.exception_handler(ServiceError)
+async def service_error(_: Request, exc: ServiceError):
+    status, answer = ERRORS[exc.code]
+    headers = {"Retry-After": "5"} if exc.code == "llm_rate_limited" else None
+    return JSONResponse(error_body(exc.code, answer, answer, exc.usage), status, headers=headers)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "fault_injection": FAULTS_ON}
+    return {"status": "ok"}
 
 
 @app.post("/api/chat")
-async def chat(request: Request):
-    fault = request.headers.get("x-test-fault") if FAULTS_ON else None
-    if "application/json" not in request.headers.get("content-type", ""):
-        return bad_request("Content-Type harus application/json.", 415)
-    raw = await request.body()
-    if len(raw) > MAX_BODY:
-        return bad_request("Body terlalu besar.", 413)
-    try:
-        body = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return bad_request("Body harus JSON UTF-8 yang valid.")
-    if not isinstance(body, dict):
-        return bad_request("Body harus berupa objek JSON.")
-    username, message, history = body.get("username"), body.get("message"), body.get("history", [])
-    if not isinstance(username, str) or username not in db.USERS:
-        return bad_request("Username tidak dikenal.")
-    if not isinstance(message, str) or not message.strip():
-        return bad_request("Pesan tidak boleh kosong.")
-    if len(message) > MAX_MESSAGE:
-        return bad_request("Pesan terlalu panjang.", 413)
-    if history is None:
-        history = []
-    if not isinstance(history, list) or not all(
-            isinstance(t, dict) and t.get("role") in {"user", "assistant"} and isinstance(t.get("content"), str)
-            for t in history):
-        return bad_request("Format history tidak valid.")
-    # Only this badge's own turns; drop everything else, keep the tail
-    history = [t for t in history if t.get("username") == username][-MAX_HISTORY:]
-    history = [{"role": t["role"], "content": t["content"][:MAX_MESSAGE]} for t in history]
-
-    # Hidden/format characters (e.g. Unicode tag smuggling) are an attack, not a question
-    if any(unicodedata.category(ch) == "Cf" for ch in message):
-        return with_fault(JSONResponse({"status": "refused", "answer": "Maaf, pesan berisi karakter tersembunyi "
-                                        "dan tidak dapat diproses.", "data": None, "sql": None,
-                                        "usage": zero_usage()}), fault)
-    message = unicodedata.normalize("NFKC", message).translate(CONFUSABLES).strip()
-
-    try:
-        result = await run_in_threadpool(agent.run, username, message, history, fault)
-        return with_fault(JSONResponse(result), fault)
-    except agent.PipelineError as e:
-        status, answer = ERRORS[e.code]
-        resp = JSONResponse({"status": "error", "answer": answer,
-                             "error": {"code": e.code, "message": answer},
-                             "data": None, "sql": None,
-                             "usage": getattr(e, "usage", None) or zero_usage()}, status_code=status)
-        if e.code == "llm_rate_limited":
-            resp.headers["Retry-After"] = "5"
-        return with_fault(resp, fault)
+def chat(req: ChatRequest):
+    # Hidden format characters (e.g. Unicode tag smuggling) are an attack, not a question
+    if any(unicodedata.category(ch) == "Cf" for ch in req.message):
+        return {"status": "refused", "answer": "Maaf, pesan berisi karakter tersembunyi dan tidak dapat diproses.",
+                "data": None, "sql": None, "usage": EMPTY_USAGE}
+    message = unicodedata.normalize("NFKC", req.message).translate(CONFUSABLES).strip()
+    # Only this badge's own turns count; anything from another account is dropped
+    history = [(t.role, t.content) for t in req.history or [] if t.username == req.username]
+    return agent.run(db.USERS[req.username], message, history[-MAX_HISTORY_TURNS:])

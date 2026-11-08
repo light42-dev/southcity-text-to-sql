@@ -1,4 +1,4 @@
-"""Builds one read-only SQLite copy of the seed data per badge.
+"""One read-only SQLite copy of the data per badge.
 
 RBAC is enforced by the data itself: a Sales badge's database only holds that
 agent's contracts (and their schedules, payments, penalties), with bank and
@@ -8,64 +8,110 @@ masked to its last 4 digits. So even SQL that forgets a filter cannot leak.
 import os
 import re
 import sqlite3
+import tempfile
 import time
+from contextlib import closing, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMA_SQL = Path(__file__).resolve().parent.parent / "schema.sql"
-DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp/southcity-data"))
-QUERY_TIMEOUT_S = 5
+from .errors import ServiceError
 
-USERS: dict[str, dict] = {}  # username -> {full_name, role, agent_id, db}
+SCHEMA_SQL = Path(__file__).resolve().parent.parent / "schema.sql"
+QUERY_TIMEOUT_S = 5
+MAX_ROWS = 200
+
+
+@dataclass(frozen=True)
+class User:
+    username: str
+    full_name: str
+    role: str
+    agent_id: int | None
+    db: Path
+
+    @property
+    def is_sales(self) -> bool:
+        return self.agent_id is not None
+
+
+USERS: dict[str, User] = {}
+
+MASK_AND_HIDE = """
+    DROP TABLE System_Users;
+    UPDATE Sales_Contracts SET CustomerNIK = '************' || substr(CustomerNIK, -4);
+"""
+KEEP_ONLY_AGENT = """
+    DELETE FROM Late_Fee_Penalties WHERE ContractID NOT IN (SELECT ContractID FROM Sales_Contracts WHERE SalesAgentID = :agent);
+    DELETE FROM Payments_Received  WHERE ContractID NOT IN (SELECT ContractID FROM Sales_Contracts WHERE SalesAgentID = :agent);
+    DELETE FROM Payment_Schedules  WHERE ContractID NOT IN (SELECT ContractID FROM Sales_Contracts WHERE SalesAgentID = :agent);
+    DELETE FROM Sales_Contracts    WHERE SalesAgentID != :agent;
+    UPDATE Payments_Received SET PaymentMethod = '-', ReceiptNumber = 'R' || PaymentID, BankReferenceNo = NULL;
+"""
 
 
 def build() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    """Load users from the seed and write one database per badge."""
+    data_dir = Path(os.getenv("DATA_DIR") or tempfile.mkdtemp(prefix="southcity-"))
+    data_dir.mkdir(parents=True, exist_ok=True)
     seed = SCHEMA_SQL.read_text()
-    src = sqlite3.connect(":memory:")
-    src.executescript(seed)
-    users = src.execute("SELECT Username, FullName, Role, AssignedAgentID FROM System_Users "
-                        "WHERE IsActive = 1").fetchall()
-    for username, full_name, role, agent in users:
-        badge = f"agent_{agent}" if role == "Sales" else "finance"
-        USERS[username] = {"full_name": full_name, "role": role, "agent_id": agent,
-                           "db": DATA_DIR / f"{badge}.db"}
-    for info in USERS.values():
-        path = info["db"]
-        if path.exists():
-            path.unlink()
-        con = sqlite3.connect(path)
+
+    with closing(sqlite3.connect(":memory:")) as src:
+        src.executescript(seed)
+        rows = src.execute("SELECT Username, FullName, Role, AssignedAgentID FROM System_Users "
+                           "WHERE IsActive = 1").fetchall()
+
+    for username, full_name, role, agent_id in rows:
+        agent_id = agent_id if role == "Sales" else None
+        badge = f"agent_{agent_id}" if agent_id else "finance"
+        USERS[username] = User(username, full_name, role, agent_id, data_dir / f"{badge}.db")
+
+    for user in {u.db: u for u in USERS.values()}.values():
+        _write_badge_db(user.db, seed, user.agent_id)
+
+
+def _write_badge_db(path: Path, seed: str, agent_id: int | None) -> None:
+    path.unlink(missing_ok=True)
+    with closing(sqlite3.connect(path)) as con:
         con.executescript(seed)
-        con.executescript("""
-            DROP TABLE System_Users;
-            UPDATE Sales_Contracts SET CustomerNIK = '************' || substr(CustomerNIK, -4);
-        """)
-        if info["agent_id"] is not None:
-            keep = "(SELECT ContractID FROM Sales_Contracts WHERE SalesAgentID = ?)"
-            for table in ("Late_Fee_Penalties", "Payments_Received", "Payment_Schedules"):
-                con.execute(f"DELETE FROM {table} WHERE ContractID NOT IN {keep}", (info["agent_id"],))
-            con.execute("DELETE FROM Sales_Contracts WHERE SalesAgentID != ?", (info["agent_id"],))
-            con.execute("UPDATE Payments_Received SET PaymentMethod = '-', "
-                        "ReceiptNumber = 'R' || PaymentID, BankReferenceNo = NULL")
+        con.executescript(MASK_AND_HIDE)
+        if agent_id is not None:
+            for statement in filter(str.strip, KEEP_ONLY_AGENT.split(";")):
+                con.execute(statement, {"agent": agent_id})
         con.commit()
-        con.close()
 
 
-def connect(username: str) -> sqlite3.Connection:
-    con = sqlite3.connect(f"file:{USERS[username]['db']}?mode=ro", uri=True,
-                          check_same_thread=False)
-    con.execute("PRAGMA query_only = ON")
+@contextmanager
+def connect(user: User):
+    """Read-only connection with a per-request query deadline."""
+    try:
+        con = sqlite3.connect(f"file:{user.db}?mode=ro", uri=True, check_same_thread=False)
+    except sqlite3.Error as e:
+        raise ServiceError("db_unavailable") from e
     deadline = time.monotonic() + QUERY_TIMEOUT_S
     con.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
-    return con
+    with closing(con):
+        con.execute("PRAGMA query_only = ON")
+        yield con
+
+
+def query(con: sqlite3.Connection, sql: str) -> tuple[list[str], list[list]]:
+    """Run one SELECT and return (columns, rows), capped at MAX_ROWS. Raises sqlite3.Error."""
+    cur = con.execute(sql)
+    columns = [d[0] for d in cur.description]
+    rows = [[_clean(v) for v in row] for row in cur.fetchmany(MAX_ROWS)]
+    return columns, rows
+
+
+def _clean(value):
+    return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
 def schema_text(con: sqlite3.Connection) -> str:
-    """Schema linking: describe exactly the tables/columns this badge's DB has."""
+    """Schema linking: the tables/columns this badge's DB has, with allowed values from DDL comments."""
     lines = []
     for table, ddl in con.execute("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"):
-        # Keep the DDL comments that list a column's allowed values (e.g. 'Tower A'), so filters match exactly.
-        vals = dict(re.findall(r"^\s*(\w+)\s[^\n]*?--\s*([^\n]*'[^\n]*)$", ddl, re.M))
-        cols = ", ".join(f"{c[1]} {c[2]}" + (f" [{vals[c[1]]}]" if c[1] in vals else "")
+        values = dict(re.findall(r"^\s*(\w+)\s[^\n]*?--\s*([^\n]*'[^\n]*)$", ddl, re.M))
+        cols = ", ".join(f"{c[1]} {c[2]}" + (f" [{values[c[1]]}]" if c[1] in values else "")
                          for c in con.execute(f"PRAGMA table_info({table})"))
         lines.append(f"- {table}({cols})")
     return "\n".join(lines)

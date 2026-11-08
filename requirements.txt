@@ -1,5 +1,7 @@
 fastapi>=0.110
 uvicorn>=0.29
+pydantic>=2.6
+anthropic>=0.40
 langchain-core>=0.3
 langchain-anthropic>=0.3
 sqlglot>=25.0
