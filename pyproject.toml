@@ -1,0 +1,16 @@
+[project]
+name = "southcity-text-to-sql"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "pydantic>=2.6",
+    "openai>=1.40",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.3",
+    "langgraph>=0.2",
+    "sqlglot>=25.0",
+]
+
+[tool.vercel]
+entrypoint = "app.main:app"

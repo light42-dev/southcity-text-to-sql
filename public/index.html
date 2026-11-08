@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SouthCity Text-to-SQL</title>
+<style>
+  :root { --bg:#f7f7f5; --panel:#fff; --text:#1d1d1b; --muted:#6b6b66; --line:#e3e2dd; --accent:#1f5f8b;
+          --ok:#2e7d4f; --refused:#b3261e; --clarify:#9a6700; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161615; --panel:#1f1f1d; --text:#ecebe6; --muted:#a3a29c; --line:#34332f; --accent:#7fb3d9;
+            --ok:#6cc08b; --refused:#f28b82; --clarify:#e3b341; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  select, textarea, button { font:inherit; color:inherit; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  select { padding:6px 8px; }
+  #log { display:flex; flex-direction:column; gap:12px; margin-bottom:16px; }
+  .msg { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; overflow-x:auto; }
+  .msg.user { border-left:3px solid var(--accent); }
+  .who { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .status { font-size:12px; font-weight:600; text-transform:uppercase; margin-left:6px; }
+  .status.ok { color:var(--ok); } .status.refused { color:var(--refused); } .status.clarify { color:var(--clarify); }
+  .status.error { color:var(--refused); }
+  .answer { white-space:pre-wrap; }
+  table { border-collapse:collapse; margin-top:8px; font-size:13px; }
+  th, td { border:1px solid var(--line); padding:4px 8px; text-align:left; white-space:nowrap; }
+  details { margin-top:8px; font-size:13px; color:var(--muted); }
+  pre { white-space:pre-wrap; margin:6px 0 0; }
+  form { display:flex; gap:8px; }
+  textarea { flex:1; padding:10px; resize:vertical; min-height:48px; }
+  button { padding:0 18px; background:var(--accent); color:#fff; border:none; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+</style>
+</head>
+<body>
+<main>
+  <h1>SouthCity Text-to-SQL</h1>
+  <p class="sub">Tanyakan data unit, kontrak, tagihan, pembayaran, dan denda. Hasil mengikuti hak akses akun yang dipilih.</p>
+  <div class="bar">
+    <label for="user">Akun:</label>
+    <select id="user">
+      <option value="sales_bambang">sales_bambang (Sales, Agent 101)</option>
+      <option value="sales_dewi">sales_dewi (Sales, Agent 102)</option>
+      <option value="sales_reza">sales_reza (Sales, Agent 103)</option>
+      <option value="finance_hendra">finance_hendra (Finance)</option>
+    </select>
+  </div>
+  <div id="log"></div>
+  <form id="form">
+    <textarea id="q" placeholder="Contoh: Berapa sisa pokok piutang Budi Santoso?" required></textarea>
+    <button id="send">Kirim</button>
+  </form>
+</main>
+<script>
+  const log = document.getElementById("log"), form = document.getElementById("form"),
+        q = document.getElementById("q"), userSel = document.getElementById("user"), send = document.getElementById("send");
+  const history = {};  // per account, so switching accounts never reuses another account's context
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function addUser(user, text) {
+    const m = el("div", "msg user"); m.append(el("div", "who", user), el("div", "answer", text)); log.append(m);
+  }
+
+  function addReply(body) {
+    const m = el("div", "msg"), who = el("div", "who", "Asisten");
+    who.append(el("span", "status " + body.status, body.status));
+    m.append(who, el("div", "answer", body.answer || "(tanpa jawaban)"));
+    const rows = body.data && body.data.rows, cols = body.data && body.data.columns;
+    if (rows && rows.length) {
+      const t = el("table"), head = el("tr");
+      cols.forEach(c => head.append(el("th", null, c))); t.append(head);
+      rows.forEach(r => { const tr = el("tr"); r.forEach(v => tr.append(el("td", null, v == null ? "" : String(v)))); t.append(tr); });
+      m.append(t);
+    }
+    if (body.sql) { const d = el("details"); d.append(el("summary", null, "SQL"), el("pre", null, body.sql)); m.append(d); }
+    log.append(m); m.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const user = userSel.value, message = q.value.trim();
+    if (!message) return;
+    addUser(user, message); q.value = ""; send.disabled = true;
+    const turns = history[user] || [];
+    try {
+      const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+                                           body: JSON.stringify({ username: user, message, history: turns }) });
+      const body = await r.json();
+      addReply(body);
+      history[user] = [...turns, { role: "user", content: message, username: user },
+                                 { role: "assistant", content: body.answer || "", username: user }].slice(-6);
+    } catch (err) {
+      addReply({ status: "error", answer: "Tidak dapat menghubungi server, silakan coba lagi." });
+    } finally {
+      send.disabled = false; q.focus();
+    }
+  });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+</script>
+</body>
+</html>

@@ -1,17 +1,19 @@
 """FastAPI entry point: POST /api/chat, GET /api/health."""
 import unicodedata
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, StrictStr, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import agent, db
 from .errors import ERRORS, ServiceError
 
+INDEX_HTML = Path(__file__).resolve().parent.parent / "public" / "index.html"
 MAX_BODY_BYTES = 256_000
 MAX_MESSAGE_CHARS = 4_000
 MAX_HISTORY_TURNS = 6
@@ -86,6 +88,12 @@ async def service_error(_: Request, exc: ServiceError):
     status, answer = ERRORS[exc.code]
     headers = {"Retry-After": "5"} if exc.code == "llm_rate_limited" else None
     return JSONResponse(error_body(exc.code, answer, answer, exc.usage), status, headers=headers)
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    """The demo page. On Vercel it is served from public/ by the CDN; this covers local runs."""
+    return FileResponse(INDEX_HTML)
 
 
 @app.get("/api/health")
