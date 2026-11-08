@@ -1,8 +1,9 @@
 # API test suite
 
 These are black-box HTTP tests for the Text-to-SQL API. They cover the 5 sample business
-questions, the 3 security tests from the brief, and the extra attack and edge cases from
-the test-journey artifact (27 cases, 68 API tests counting RBAC variants).
+questions, the 3 security tests from the brief, 12 everyday multi-table questions (H1–H12),
+and the attack and edge cases from the test-journey artifact: 39 cases, 88 API tests
+counting RBAC variants.
 
 ```bash
 pip install -r requirements-dev.txt
@@ -10,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest -m "not api"                                    # offline helper tests only
 API_BASE_URL=http://localhost:8000 pytest              # local server
 API_BASE_URL=https://<your-app>.vercel.app pytest      # deployed
-pytest -m security                                     # one group: business | security | edge | contract
+pytest -m security                                     # one group: business | daily | security | edge | contract
 ```
 
 If no server is reachable, API tests are **skipped**, not failed.
@@ -74,6 +75,7 @@ Amounts are matched in any common format: `Rp65.000.000`, `65,000,000`, `65 juta
 | File | Cases |
 |---|---|
 | `test_business.py` | B1–B5, each also checked per badge (Sales sees only its own share; other agents are refused) |
+| `test_daily.py` | H1–H12 everyday multi-table questions (follow-up calls, collection priority, cash-in report, agent performance, handover readiness, KPR pipeline, late payments, missing penalties, receivables by scheme, portfolio, value per tower) with per-badge variants |
 | `test_security.py` | S1 (+ A1 variant), S2 (all badges), S3, A2, A4, A6, A7, A8, A9, A11 |
 | `test_edge.py` | E1–E11 |
 | `test_contract.py` | Response shape, unknown users, missing fields, role fields in the body |
